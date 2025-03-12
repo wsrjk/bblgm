@@ -13,12 +13,15 @@ score = 0
 def generate_bubbles():
     while True:
         letter = random.choice(string.ascii_uppercase)
-        bubbles.append({
-            'id': int(time.time() * 1000),
-            'letter': letter,
-            'x': random.randint(10, 90),
-            'y': 100
-        })
+        # Generate unique x position to avoid clustering
+        x = random.randint(5, 95)  
+        if not any(abs(bubble['x'] - x) < 10 for bubble in bubbles):
+            bubbles.append({
+                'id': int(time.time() * 1000),
+                'letter': letter,
+                'x': x,
+                'y': 600  # Start from the bottom of the screen
+            })
         time.sleep(1)
 
 threading.Thread(target=generate_bubbles, daemon=True).start()
@@ -31,7 +34,7 @@ def index():
     <head>
         <title>Bubble Game</title>
         <style>
-            body { background-color: #bbdefb; overflow: hidden; margin: 0; font-family: Arial; }
+            body { background-color: #bbdefb; overflow: hidden; margin: 0; font-family: Arial; height: 100vh; }
             .bubble {
                 position: absolute;
                 width: 60px;
@@ -44,7 +47,7 @@ def index():
                 color: white;
                 font-size: 26px;
                 z-index: 9999;
-                transition: top 0.1s ease;
+                transition: top 0.05s linear;
             }
             .score {
                 position: absolute;
@@ -60,8 +63,6 @@ def index():
         <div id="game"></div>
 
         <script>
-            let score = 0;
-
             function updateBubbles(bubbles) {
                 const game = document.getElementById('game');
                 game.innerHTML = '';
@@ -90,7 +91,7 @@ def index():
                 document.getElementById('score').textContent = `Score: ${data.score}`;
             });
 
-            setInterval(fetchBubbles, 100);
+            setInterval(fetchBubbles, 50);
         </script>
     </body>
     </html>
@@ -99,10 +100,10 @@ def index():
 @app.route('/get_bubbles')
 def get_bubbles():
     global bubbles, score
-    # Keep bubbles on screen longer
-    bubbles = [bubble for bubble in bubbles if bubble['y'] > -50]
+    # Keep only bubbles that are still on the screen
+    bubbles = [bubble for bubble in bubbles if bubble['y'] > -60]
     for bubble in bubbles:
-        bubble['y'] -= 2  # Slower movement for better visibility
+        bubble['y'] -= 2  # Move upward smoothly
     return jsonify({'bubbles': bubbles, 'score': score})
 
 @app.route('/hit_bubble')
