@@ -8,9 +8,13 @@ app = Flask(__name__)
 
 bubbles = []
 score = 0
+level = 1
+speed = 2  # Bubble upward speed
+spawn_rate = 1.5  # Bubble generation rate in seconds
 
-# Generate bubbles periodically
+# Generate bubbles periodically based on the current level
 def generate_bubbles():
+    global level, spawn_rate
     while True:
         letter = random.choice(string.ascii_uppercase)
         x = random.randint(5, 95)  
@@ -21,8 +25,9 @@ def generate_bubbles():
                 'x': x,
                 'y': 600  # Start from the bottom
             })
-        time.sleep(1)
+        time.sleep(spawn_rate)
 
+# Start the bubble generator
 threading.Thread(target=generate_bubbles, daemon=True).start()
 
 @app.route('/')
@@ -31,7 +36,7 @@ def index():
     <!doctype html>
     <html>
     <head>
-        <title>Bubble Game</title>
+        <title>Bubble Game - Level Mode</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             body { 
@@ -40,11 +45,11 @@ def index():
                 margin: 0; 
                 font-family: Arial; 
                 height: 100vh;
-                touch-action: manipulation; /* Prevent accidental zooming on double-tap */
+                touch-action: manipulation;
             }
             .bubble {
                 position: absolute;
-                width: 10vw; /* Adjust bubble size based on screen width */
+                width: 10vw;
                 height: 10vw;
                 background-color: #42a5f5;
                 border-radius: 50%;
@@ -56,12 +61,16 @@ def index():
                 z-index: 9999;
                 transition: top 0.05s linear;
             }
-            .score {
+            .score, .level {
                 position: absolute;
                 top: 10px;
                 left: 10px;
                 font-size: 24px;
                 font-weight: bold;
+            }
+            .level {
+                left: auto;
+                right: 10px;
             }
             @media (min-width: 768px) {
                 .bubble {
@@ -74,6 +83,7 @@ def index():
     </head>
     <body>
         <div class="score" id="score">Score: 0</div>
+        <div class="level" id="level">Level: 1</div>
         <div id="game"></div>
 
         <script>
@@ -101,6 +111,7 @@ def index():
                 const data = await response.json();
                 updateBubbles(data.bubbles);
                 document.getElementById('score').textContent = `Score: ${data.score}`;
+                document.getElementById('level').textContent = `Level: ${data.level}`;
             }
 
             // ✅ Keyboard support
@@ -115,6 +126,7 @@ def index():
                 const data = await response.json();
                 updateBubbles(data.bubbles);
                 document.getElementById('score').textContent = `Score: ${data.score}`;
+                document.getElementById('level').textContent = `Level: ${data.level}`;
             }
 
             setInterval(fetchBubbles, 50);
@@ -125,12 +137,22 @@ def index():
 
 @app.route('/get_bubbles')
 def get_bubbles():
-    global bubbles, score
+    global bubbles, score, level, speed, spawn_rate
+    
     # Keep only bubbles that are still on the screen
     bubbles = [bubble for bubble in bubbles if bubble['y'] > -60]
+    
+    # Move bubbles upward
     for bubble in bubbles:
-        bubble['y'] -= 2  # Slower upward movement for better playability
-    return jsonify({'bubbles': bubbles, 'score': score})
+        bubble['y'] -= speed
+    
+    # ✅ Level progression
+    if score >= level * 10 and level < 10:
+        level += 1
+        speed += 0.5
+        spawn_rate = max(0.5, spawn_rate - 0.1)  # Decrease bubble spawn time
+    
+    return jsonify({'bubbles': bubbles, 'score': score, 'level': level})
 
 @app.route('/hit_bubble')
 def hit_bubble():
@@ -140,7 +162,7 @@ def hit_bubble():
         if bubble['letter'] == letter:
             bubbles.remove(bubble)
             score += 1
-    return jsonify({'bubbles': bubbles, 'score': score})
+    return jsonify({'bubbles': bubbles, 'score': score, 'level': level})
 
 import os
 
