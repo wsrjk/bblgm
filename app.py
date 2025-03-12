@@ -32,14 +32,27 @@ def index():
         <title>Bubble Game</title>
         <style>
             body { background-color: #bbdefb; overflow: hidden; margin: 0; font-family: Arial; }
-            .bubble { position: absolute; width: 50px; height: 50px; background-color: #42a5f5; border-radius: 50%;
-                      display: flex; align-items: center; justify-content: center; color: white; font-size: 24px;
-                      animation: float 4s linear forwards; }
-            @keyframes float {
-                0% { transform: translateY(0); }
-                100% { transform: translateY(-800px); }
+            .bubble {
+                position: absolute;
+                width: 60px;
+                height: 60px;
+                background-color: #42a5f5;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-size: 26px;
+                z-index: 9999;
+                transition: top 0.1s ease;
             }
-            .score { position: absolute; top: 10px; left: 10px; font-size: 24px; font-weight: bold; }
+            .score {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                font-size: 24px;
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
@@ -48,6 +61,7 @@ def index():
 
         <script>
             let score = 0;
+
             function updateBubbles(bubbles) {
                 const game = document.getElementById('game');
                 game.innerHTML = '';
@@ -76,7 +90,7 @@ def index():
                 document.getElementById('score').textContent = `Score: ${data.score}`;
             });
 
-            setInterval(fetchBubbles, 500);
+            setInterval(fetchBubbles, 100);
         </script>
     </body>
     </html>
@@ -85,28 +99,24 @@ def index():
 @app.route('/get_bubbles')
 def get_bubbles():
     global bubbles, score
-    bubbles = [bubble for bubble in bubbles if bubble['y'] > -100]
+    # Keep bubbles on screen longer
+    bubbles = [bubble for bubble in bubbles if bubble['y'] > -50]
     for bubble in bubbles:
-        bubble['y'] -= 5
+        bubble['y'] -= 2  # Slower movement for better visibility
     return jsonify({'bubbles': bubbles, 'score': score})
 
 @app.route('/hit_bubble')
 def hit_bubble():
     global bubbles, score
     letter = request.args.get('letter')
-    bubbles = [bubble for bubble in bubbles if bubble['letter'] != letter or not score_increment(bubble)]
+    for bubble in bubbles[:]:
+        if bubble['letter'] == letter:
+            bubbles.remove(bubble)
+            score += 1
     return jsonify({'bubbles': bubbles, 'score': score})
-
-def score_increment(bubble):
-    global score
-    score += 1
-    return True
 
 import os
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=True)
-
-
-
