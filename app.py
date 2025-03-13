@@ -3,6 +3,7 @@ import random
 import string
 import time
 import threading
+import os
 
 app = Flask(__name__)
 
@@ -11,7 +12,7 @@ score = 0
 level = 1
 speed = 4
 spawn_rate = 1.0
-player_name = ''
+player_name = ""
 highest_score = 0
 
 # Generate bubbles periodically based on the current level
@@ -19,8 +20,14 @@ def generate_bubbles():
     global level, spawn_rate
     while True:
         if len(bubbles) < 10:
-            letter = random.choice(string.ascii_uppercase)
             x = random.randint(5, 95)
+            if level <= 10:
+                letter = random.choice(string.ascii_uppercase)
+            elif level <= 15:
+                letter = "".join(random.choices(string.ascii_uppercase, k=2))
+            else:
+                letter = "".join(random.choices(string.ascii_uppercase, k=3))
+
             if not any(abs(bubble['x'] - x) < 10 for bubble in bubbles):
                 bubbles.append({
                     'id': int(time.time() * 1000),
@@ -30,7 +37,6 @@ def generate_bubbles():
                 })
         time.sleep(spawn_rate)
 
-# Start bubble generation in a separate thread
 threading.Thread(target=generate_bubbles, daemon=True).start()
 
 @app.route('/')
@@ -42,11 +48,11 @@ def index():
         <title>Bubble Game - Level Mode</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body { 
-                background-color: #bbdefb; 
-                overflow: hidden; 
-                margin: 0; 
-                font-family: Arial; 
+            body {
+                background-color: #bbdefb;
+                overflow: hidden;
+                margin: 0;
+                font-family: Arial;
                 height: 100vh;
                 touch-action: manipulation;
             }
@@ -61,29 +67,33 @@ def index():
                 justify-content: center;
                 color: white;
                 font-size: 4vw;
-                transition: top 0.05s linear;
                 box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
+                transition: top 0.05s linear;
             }
-            .score, .level, .highest-score, .player-name {
+            .highlight {
+                background-color: #4caf50 !important;
+            }
+            .score, .level, .player, .high-score {
                 position: absolute;
                 top: 10px;
                 font-size: 18px;
                 font-weight: bold;
+                color: #333;
             }
             .score { left: 10px; }
-            .level { left: 120px; }
-            .highest-score { left: 230px; }
-            .player-name { left: 400px; }
+            .level { left: 150px; }
+            .player { right: 10px; }
+            .high-score { top: 40px; left: 10px; }
             .pause-btn {
                 position: absolute;
                 top: 10px;
-                right: 10px;
-                background-color: #ff5722;
+                right: 100px;
+                padding: 8px 12px;
+                background-color: #f44336;
                 color: white;
                 border: none;
-                padding: 5px 10px;
-                cursor: pointer;
                 border-radius: 5px;
+                cursor: pointer;
             }
             @media (min-width: 768px) {
                 .bubble {
@@ -97,30 +107,19 @@ def index():
     <body>
         <div class="score" id="score">Score: 0</div>
         <div class="level" id="level">Level: 1</div>
-        <div class="highest-score" id="highestScore">Highest Score: 0</div>
-        <div class="player-name" id="playerName">Player: </div>
+        <div class="player" id="player">Player: </div>
+        <div class="high-score" id="high-score">High Score: 0</div>
         <button class="pause-btn" onclick="togglePause()">Pause</button>
         <div id="game"></div>
 
-        <audio id="correctSound" src="/static/correct.mp3"></audio>
-        <audio id="wrongSound" src="/static/wrong.mp3"></audio>
+        <audio id="correct-sound" src="/static/correct.mp3"></audio>
+        <audio id="wrong-sound" src="/static/wrong.mp3"></audio>
 
         <script>
             let score = 0;
             let paused = false;
-            let playerName = '';
-            let highestScore = 0;
-
-            // ✅ Ask for player name
-            function getPlayerName() {
-                playerName = prompt('Enter your name:');
-                if (!playerName) playerName = 'Guest';
-                document.getElementById('playerName').textContent = `Player: ${playerName}`;
-            }
-            getPlayerName();
 
             function updateBubbles(bubbles) {
-                if (paused) return;
                 const game = document.getElementById('game');
                 game.innerHTML = '';
                 bubbles.forEach(bubble => {
@@ -139,40 +138,39 @@ def index():
             }
 
             async function fetchBubbles() {
-                if (paused) return;
-                const response = await fetch('/get_bubbles');
-                const data = await response.json();
-                updateBubbles(data.bubbles);
-                document.getElementById('score').textContent = `Score: ${data.score}`;
-                document.getElementById('level').textContent = `Level: ${data.level}`;
-                document.getElementById('highestScore').textContent = `Highest Score: ${data.highest_score}`;
+                if (!paused) {
+                    const response = await fetch('/get_bubbles');
+                    const data = await response.json();
+                    updateBubbles(data.bubbles);
+                    document.getElementById('score').textContent = `Score: ${data.score}`;
+                    document.getElementById('level').textContent = `Level: ${data.level}`;
+                    document.getElementById('high-score').textContent = `High Score: ${data.highest_score}`;
+                }
             }
 
+            document.addEventListener('keydown', async (event) => {
+                const keyPressed = event.key.toUpperCase();
+                await hitBubble(keyPressed);
+            });
+
             async function hitBubble(letter) {
-                if (paused) return;
                 const response = await fetch(`/hit_bubble?letter=${letter}`);
                 const data = await response.json();
                 updateBubbles(data.bubbles);
                 document.getElementById('score').textContent = `Score: ${data.score}`;
                 document.getElementById('level').textContent = `Level: ${data.level}`;
-                document.getElementById('highestScore').textContent = `Highest Score: ${data.highest_score}`;
+                document.getElementById('high-score').textContent = `High Score: ${data.highest_score}`;
 
+                // ✅ Play sound
                 if (data.correct) {
-                    document.getElementById('correctSound').play();
+                    document.getElementById('correct-sound').play();
                 } else {
-                    document.getElementById('wrongSound').play();
+                    document.getElementById('wrong-sound').play();
                 }
             }
 
-            document.addEventListener('keydown', async (event) => {
-                if (paused) return;
-                const keyPressed = event.key.toUpperCase();
-                await hitBubble(keyPressed);
-            });
-
             function togglePause() {
                 paused = !paused;
-                document.querySelector('.pause-btn').textContent = paused ? 'Resume' : 'Pause';
             }
 
             setInterval(fetchBubbles, 50);
@@ -189,10 +187,7 @@ def get_bubbles():
     for bubble in bubbles:
         bubble['y'] -= speed
     
-    if score > highest_score:
-        highest_score = score
-    
-    if score >= level * 10 and level < 10:
+    if score >= level * 10 and level < 20:
         level += 1
         speed += 0.7
         spawn_rate = max(0.4, spawn_rate - 0.1)
@@ -201,16 +196,21 @@ def get_bubbles():
 
 @app.route('/hit_bubble')
 def hit_bubble():
-    global bubbles, score
+    global bubbles, score, highest_score
     letter = request.args.get('letter')
+    correct = False
+    
     for bubble in bubbles[:]:
         if bubble['letter'] == letter:
             bubbles.remove(bubble)
             score += 1
-            return jsonify({'bubbles': bubbles, 'score': score, 'level': level, 'highest_score': highest_score, 'correct': True})
-    return jsonify({'bubbles': bubbles, 'score': score, 'level': level, 'highest_score': highest_score, 'correct': False})
+            correct = True
 
-import os
+    if score > highest_score:
+        highest_score = score
+    
+    return jsonify({'bubbles': bubbles, 'score': score, 'level': level, 'highest_score': highest_score, 'correct': correct})
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=True)
