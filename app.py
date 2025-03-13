@@ -9,8 +9,10 @@ app = Flask(__name__)
 bubbles = []
 score = 0
 level = 1
-speed = 4  # Increased starting speed
-spawn_rate = 1.0  # Faster spawn rate
+speed = 4
+spawn_rate = 1.0
+player_name = ""
+high_score = {"name": "Anonymous", "score": 0}
 
 # Generate bubbles periodically based on the current level
 def generate_bubbles():
@@ -19,13 +21,12 @@ def generate_bubbles():
         if len(bubbles) < 10:  # Limit total bubbles on screen
             letter = random.choice(string.ascii_uppercase)
             x = random.randint(5, 95)
-            # Ensure proper horizontal spacing between bubbles
             if not any(abs(bubble['x'] - x) < 10 for bubble in bubbles):
                 bubbles.append({
                     'id': int(time.time() * 1000),
                     'letter': letter,
                     'x': x,
-                    'y': 700  # Start from the bottom (increased starting point)
+                    'y': 700  # Start from the bottom
                 })
         time.sleep(spawn_rate)
 
@@ -64,16 +65,52 @@ def index():
                 transition: top 0.05s linear;
                 box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
             }
-            .score, .level {
+            .score, .level, .high-score, .player {
                 position: absolute;
                 top: 10px;
-                left: 10px;
-                font-size: 24px;
+                font-size: 18px;
                 font-weight: bold;
             }
-            .level {
-                left: auto;
-                right: 10px;
+            .score { left: 10px; }
+            .level { left: 150px; }
+            .high-score { left: 300px; }
+            .player { right: 10px; }
+            #start-screen {
+                position: fixed;
+                width: 100vw;
+                height: 100vh;
+                background-color: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-size: 24px;
+                flex-direction: column;
+                z-index: 10000;
+            }
+            #player-input {
+                padding: 10px;
+                font-size: 20px;
+                margin-top: 10px;
+                width: 60%;
+                border-radius: 5px;
+                border: none;
+                outline: none;
+                text-align: center;
+            }
+            #start-btn {
+                margin-top: 20px;
+                padding: 12px 24px;
+                font-size: 20px;
+                background-color: #42a5f5;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: 0.2s;
+            }
+            #start-btn:hover {
+                background-color: #1e88e5;
             }
             @media (min-width: 768px) {
                 .bubble {
@@ -85,11 +122,28 @@ def index():
         </style>
     </head>
     <body>
+        <div id="start-screen">
+            <div>Enter Your Name:</div>
+            <input id="player-input" type="text" placeholder="Your Name">
+            <button id="start-btn" onclick="startGame()">Start Game</button>
+        </div>
+
         <div class="score" id="score">Score: 0</div>
         <div class="level" id="level">Level: 1</div>
+        <div class="high-score" id="high-score">High Score: 0</div>
+        <div class="player" id="player-name">Player: Anonymous</div>
         <div id="game"></div>
 
         <script>
+            let playerName = '';
+
+            function startGame() {
+                playerName = document.getElementById('player-input').value || 'Anonymous';
+                document.getElementById('player-name').textContent = `Player: ${playerName}`;
+                document.getElementById('start-screen').style.display = 'none';
+                fetch(`/set_player_name?name=${playerName}`);
+            }
+
             function updateBubbles(bubbles) {
                 const game = document.getElementById('game');
                 game.innerHTML = '';
@@ -99,8 +153,7 @@ def index():
                     div.style.left = `${bubble.x}%`;
                     div.style.top = `${bubble.y}px`;
                     div.textContent = bubble.letter;
-
-                    // ✅ Touch support for mobile
+                    
                     div.addEventListener('click', async () => {
                         await hitBubble(bubble.letter);
                     });
@@ -115,21 +168,14 @@ def index():
                 updateBubbles(data.bubbles);
                 document.getElementById('score').textContent = `Score: ${data.score}`;
                 document.getElementById('level').textContent = `Level: ${data.level}`;
+                document.getElementById('high-score').textContent = `High Score: ${data.high_score.name} - ${data.high_score.score}`;
             }
 
-            // ✅ Keyboard support
-            document.addEventListener('keydown', async (event) => {
-                const keyPressed = event.key.toUpperCase();
-                await hitBubble(keyPressed);
-            });
-
-            // ✅ Function to hit bubbles
             async function hitBubble(letter) {
                 const response = await fetch(`/hit_bubble?letter=${letter}`);
                 const data = await response.json();
                 updateBubbles(data.bubbles);
                 document.getElementById('score').textContent = `Score: ${data.score}`;
-                document.getElementById('level').textContent = `Level: ${data.level}`;
             }
 
             setInterval(fetchBubbles, 50);
@@ -138,24 +184,30 @@ def index():
     </html>
     ''')
 
+@app.route('/set_player_name')
+def set_player_name():
+    global player_name
+    player_name = request.args.get('name')
+    return jsonify({'status': 'ok'})
+
 @app.route('/get_bubbles')
 def get_bubbles():
-    global bubbles, score, level, speed, spawn_rate
+    global bubbles, score, level, speed, spawn_rate, high_score
     
-    # Remove bubbles once they go out of view
     bubbles = [bubble for bubble in bubbles if bubble['y'] > -60]
-    
-    # Move bubbles upward (increased speed for better flow)
     for bubble in bubbles:
         bubble['y'] -= speed
     
-    # ✅ Level progression
     if score >= level * 10 and level < 10:
         level += 1
-        speed += 0.7  # Increase bubble speed with each level
-        spawn_rate = max(0.4, spawn_rate - 0.1)  # Increase bubble generation speed
+        speed += 0.7
+        spawn_rate = max(0.4, spawn_rate - 0.1)
     
-    return jsonify({'bubbles': bubbles, 'score': score, 'level': level})
+    if score > high_score['score']:
+        high_score['score'] = score
+        high_score['name'] = player_name
+    
+    return jsonify({'bubbles': bubbles, 'score': score, 'level': level, 'high_score': high_score})
 
 @app.route('/hit_bubble')
 def hit_bubble():
