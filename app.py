@@ -73,21 +73,33 @@ def index():
             .highlight {
                 background-color: #4caf50 !important;
             }
-            .score, .level, .player, .high-score {
-                position: absolute;
+            .header {
+                position: fixed;
                 top: 10px;
+                left: 0;
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0 20px;
+                box-sizing: border-box;
                 font-size: 18px;
                 font-weight: bold;
                 color: #333;
             }
-            .score { left: 10px; }
-            .level { left: 150px; }
-            .player { right: 10px; }
-            .high-score { top: 40px; left: 10px; }
+            .left {
+                display: flex;
+                gap: 20px;
+            }
+            .center {
+                text-align: center;
+                flex-grow: 1;
+            }
+            .right {
+                display: flex;
+                justify-content: flex-end;
+            }
             .pause-btn {
-                position: absolute;
-                top: 10px;
-                right: 100px;
                 padding: 8px 12px;
                 background-color: #f44336;
                 color: white;
@@ -105,11 +117,25 @@ def index():
         </style>
     </head>
     <body>
-        <div class="score" id="score">Score: 0</div>
-        <div class="level" id="level">Level: 1</div>
-        <div class="player" id="player">Player: </div>
-        <div class="high-score" id="high-score">High Score: 0</div>
-        <button class="pause-btn" onclick="togglePause()">Pause</button>
+        <div class="header">
+            <!-- Left side -->
+            <div class="left">
+                <div id="level">Level: 1</div>
+                <div id="score">Score: 0</div>
+                <div id="high-score">High Score: 0</div>
+            </div>
+
+            <!-- Center -->
+            <div class="center">
+                <span id="player-name">Player: Guest</span>
+            </div>
+
+            <!-- Right side -->
+            <div class="right">
+                <button class="pause-btn" onclick="togglePause()">Pause</button>
+            </div>
+        </div>
+
         <div id="game"></div>
 
         <audio id="correct-sound" src="/static/correct.mp3"></audio>
@@ -121,13 +147,10 @@ def index():
             let playerName = localStorage.getItem('playerName') || "";
 
             if (!playerName) {
-                playerName = prompt("Enter player name:");
-                if (playerName) {
-                    localStorage.setItem('playerName', playerName);
-                }
+                playerName = prompt("Enter player name:") || "Guest";
+                localStorage.setItem('playerName', playerName);
             }
-
-            document.getElementById('player').textContent = `Player: ${playerName}`;
+            document.getElementById('player-name').textContent = `Player: ${playerName}`;
 
             function updateBubbles(bubbles) {
                 const game = document.getElementById('game');
