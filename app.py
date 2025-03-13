@@ -11,17 +11,16 @@ score = 0
 level = 1
 speed = 4
 spawn_rate = 1.0
-used_letters = set()
-game_paused = False
+player_name = ''
+highest_score = 0
 
 # Generate bubbles periodically based on the current level
 def generate_bubbles():
-    global level, spawn_rate, game_paused
+    global level, spawn_rate
     while True:
-        if not game_paused and len(bubbles) < 10:
+        if len(bubbles) < 10:
             letter = random.choice(string.ascii_uppercase)
             x = random.randint(5, 95)
-            # Ensure no overlapping bubbles horizontally
             if not any(abs(bubble['x'] - x) < 10 for bubble in bubbles):
                 bubbles.append({
                     'id': int(time.time() * 1000),
@@ -65,23 +64,26 @@ def index():
                 transition: top 0.05s linear;
                 box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
             }
-            .score, .level, .pause-btn {
+            .score, .level, .highest-score, .player-name {
                 position: absolute;
                 top: 10px;
-                font-size: 24px;
+                font-size: 18px;
                 font-weight: bold;
             }
             .score { left: 10px; }
-            .level { right: 10px; }
+            .level { left: 120px; }
+            .highest-score { left: 230px; }
+            .player-name { left: 400px; }
             .pause-btn {
-                left: 50%;
-                transform: translateX(-50%);
-                background-color: #f44336;
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background-color: #ff5722;
                 color: white;
-                padding: 5px 15px;
                 border: none;
-                border-radius: 5px;
+                padding: 5px 10px;
                 cursor: pointer;
+                border-radius: 5px;
             }
             @media (min-width: 768px) {
                 .bubble {
@@ -95,14 +97,30 @@ def index():
     <body>
         <div class="score" id="score">Score: 0</div>
         <div class="level" id="level">Level: 1</div>
-        <button class="pause-btn" id="pause-btn" onclick="togglePause()">Pause</button>
+        <div class="highest-score" id="highestScore">Highest Score: 0</div>
+        <div class="player-name" id="playerName">Player: </div>
+        <button class="pause-btn" onclick="togglePause()">Pause</button>
         <div id="game"></div>
 
+        <audio id="correctSound" src="/static/correct.mp3"></audio>
+        <audio id="wrongSound" src="/static/wrong.mp3"></audio>
+
         <script>
-            let gamePaused = false;
-            const hitSound = new Audio('https://www.soundjay.com/button/sounds/button-3.mp3');
+            let score = 0;
+            let paused = false;
+            let playerName = '';
+            let highestScore = 0;
+
+            // ✅ Ask for player name
+            function getPlayerName() {
+                playerName = prompt('Enter your name:');
+                if (!playerName) playerName = 'Guest';
+                document.getElementById('playerName').textContent = `Player: ${playerName}`;
+            }
+            getPlayerName();
 
             function updateBubbles(bubbles) {
+                if (paused) return;
                 const game = document.getElementById('game');
                 game.innerHTML = '';
                 bubbles.forEach(bubble => {
@@ -112,11 +130,8 @@ def index():
                     div.style.top = `${bubble.y}px`;
                     div.textContent = bubble.letter;
 
-                    // ✅ Touch and mouse support for mobile
                     div.addEventListener('click', async () => {
-                        if (!gamePaused) {
-                            await hitBubble(bubble.letter);
-                        }
+                        await hitBubble(bubble.letter);
                     });
 
                     game.appendChild(div);
@@ -124,37 +139,40 @@ def index():
             }
 
             async function fetchBubbles() {
-                if (!gamePaused) {
-                    const response = await fetch('/get_bubbles');
-                    const data = await response.json();
-                    updateBubbles(data.bubbles);
-                    document.getElementById('score').textContent = `Score: ${data.score}`;
-                    document.getElementById('level').textContent = `Level: ${data.level}`;
-                }
-            }
-
-            // ✅ Keyboard support
-            document.addEventListener('keydown', async (event) => {
-                if (!gamePaused) {
-                    const keyPressed = event.key.toUpperCase();
-                    await hitBubble(keyPressed);
-                }
-            });
-
-            async function hitBubble(letter) {
-                const response = await fetch(`/hit_bubble?letter=${letter}`);
+                if (paused) return;
+                const response = await fetch('/get_bubbles');
                 const data = await response.json();
-                if (data.hit) {
-                    hitSound.play();
-                }
                 updateBubbles(data.bubbles);
                 document.getElementById('score').textContent = `Score: ${data.score}`;
                 document.getElementById('level').textContent = `Level: ${data.level}`;
+                document.getElementById('highestScore').textContent = `Highest Score: ${data.highest_score}`;
             }
 
+            async function hitBubble(letter) {
+                if (paused) return;
+                const response = await fetch(`/hit_bubble?letter=${letter}`);
+                const data = await response.json();
+                updateBubbles(data.bubbles);
+                document.getElementById('score').textContent = `Score: ${data.score}`;
+                document.getElementById('level').textContent = `Level: ${data.level}`;
+                document.getElementById('highestScore').textContent = `Highest Score: ${data.highest_score}`;
+
+                if (data.correct) {
+                    document.getElementById('correctSound').play();
+                } else {
+                    document.getElementById('wrongSound').play();
+                }
+            }
+
+            document.addEventListener('keydown', async (event) => {
+                if (paused) return;
+                const keyPressed = event.key.toUpperCase();
+                await hitBubble(keyPressed);
+            });
+
             function togglePause() {
-                gamePaused = !gamePaused;
-                document.getElementById('pause-btn').textContent = gamePaused ? 'Resume' : 'Pause';
+                paused = !paused;
+                document.querySelector('.pause-btn').textContent = paused ? 'Resume' : 'Pause';
             }
 
             setInterval(fetchBubbles, 50);
@@ -165,42 +183,34 @@ def index():
 
 @app.route('/get_bubbles')
 def get_bubbles():
-    global bubbles, score, level, speed, spawn_rate
+    global bubbles, score, level, speed, spawn_rate, highest_score
     
-    # Remove bubbles once they go out of view
     bubbles = [bubble for bubble in bubbles if bubble['y'] > -60]
-    
-    # Move bubbles upward
     for bubble in bubbles:
         bubble['y'] -= speed
     
-    # ✅ Level progression
+    if score > highest_score:
+        highest_score = score
+    
     if score >= level * 10 and level < 10:
         level += 1
         speed += 0.7
         spawn_rate = max(0.4, spawn_rate - 0.1)
-    
-    return jsonify({'bubbles': bubbles, 'score': score, 'level': level})
+
+    return jsonify({'bubbles': bubbles, 'score': score, 'level': level, 'highest_score': highest_score})
 
 @app.route('/hit_bubble')
 def hit_bubble():
-    global bubbles, score, used_letters
+    global bubbles, score
     letter = request.args.get('letter')
-    hit = False
     for bubble in bubbles[:]:
-        if bubble['letter'] == letter and letter not in used_letters:
+        if bubble['letter'] == letter:
             bubbles.remove(bubble)
             score += 1
-            used_letters.add(letter)
-            hit = True
-
-    # ✅ Allow letter reuse after bubble disappears
-    used_letters.discard(letter)
-    
-    return jsonify({'bubbles': bubbles, 'score': score, 'level': level, 'hit': hit})
+            return jsonify({'bubbles': bubbles, 'score': score, 'level': level, 'highest_score': highest_score, 'correct': True})
+    return jsonify({'bubbles': bubbles, 'score': score, 'level': level, 'highest_score': highest_score, 'correct': False})
 
 import os
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=True)
