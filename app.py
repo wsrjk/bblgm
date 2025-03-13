@@ -14,20 +14,17 @@ speed = 4
 spawn_rate = 1.0
 player_name = ""
 highest_score = 0
+active_letters = set()
 
 # Generate bubbles periodically based on the current level
 def generate_bubbles():
     global level, spawn_rate
     while True:
         if len(bubbles) < 10:
-            x = random.randint(5, 95)
-            if level <= 10:
-                letter = random.choice(string.ascii_uppercase)
-            elif level <= 15:
-                letter = "".join(random.choices(string.ascii_uppercase, k=2))
-            else:
-                letter = "".join(random.choices(string.ascii_uppercase, k=3))
+            # Avoid duplicate letters in the same frame
+            letter = random.choice([l for l in string.ascii_uppercase if l not in active_letters])
 
+            x = random.randint(5, 95)
             if not any(abs(bubble['x'] - x) < 10 for bubble in bubbles):
                 bubbles.append({
                     'id': int(time.time() * 1000),
@@ -35,6 +32,7 @@ def generate_bubbles():
                     'x': x,
                     'y': 700
                 })
+                active_letters.add(letter)
         time.sleep(spawn_rate)
 
 threading.Thread(target=generate_bubbles, daemon=True).start()
@@ -87,17 +85,13 @@ def index():
                 font-weight: bold;
                 color: #333;
             }
-            .left {
+            .left, .right {
                 display: flex;
                 gap: 20px;
             }
             .center {
                 text-align: center;
                 flex-grow: 1;
-            }
-            .right {
-                display: flex;
-                justify-content: flex-end;
             }
             .pause-btn {
                 padding: 8px 12px;
@@ -213,12 +207,15 @@ def index():
 
 @app.route('/get_bubbles')
 def get_bubbles():
-    global bubbles, score, level, speed, spawn_rate, highest_score
+    global bubbles, score, level, speed, spawn_rate, highest_score, active_letters
 
     bubbles = [bubble for bubble in bubbles if bubble['y'] > -60]
+    active_letters = {bubble['letter'] for bubble in bubbles}
+
     for bubble in bubbles:
         bubble['y'] -= speed
 
+    # ✅ Level progression based on score threshold
     if score >= level * 10 and level < 20:
         level += 1
         speed += 0.7
@@ -228,7 +225,7 @@ def get_bubbles():
 
 @app.route('/hit_bubble')
 def hit_bubble():
-    global bubbles, score, highest_score
+    global bubbles, score, highest_score, active_letters
     letter = request.args.get('letter')
     correct = False
 
@@ -237,6 +234,7 @@ def hit_bubble():
             bubbles.remove(bubble)
             score += 1
             correct = True
+            active_letters.discard(letter)
 
     if score > highest_score:
         highest_score = score
