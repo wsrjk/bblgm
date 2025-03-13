@@ -18,7 +18,7 @@ high_score = {"name": "Anonymous", "score": 0}
 def generate_bubbles():
     global level, spawn_rate
     while True:
-        if len(bubbles) < 10:  # Limit total bubbles on screen
+        if len(bubbles) < 10:
             letter = random.choice(string.ascii_uppercase)
             x = random.randint(5, 95)
             if not any(abs(bubble['x'] - x) < 10 for bubble in bubbles):
@@ -26,7 +26,7 @@ def generate_bubbles():
                     'id': int(time.time() * 1000),
                     'letter': letter,
                     'x': x,
-                    'y': 700  # Start from the bottom
+                    'y': 700
                 })
         time.sleep(spawn_rate)
 
@@ -141,6 +141,7 @@ def index():
                 playerName = document.getElementById('player-input').value || 'Anonymous';
                 document.getElementById('player-name').textContent = `Player: ${playerName}`;
                 document.getElementById('start-screen').style.display = 'none';
+                window.focus();
                 fetch(`/set_player_name?name=${playerName}`);
             }
 
@@ -153,11 +154,8 @@ def index():
                     div.style.left = `${bubble.x}%`;
                     div.style.top = `${bubble.y}px`;
                     div.textContent = bubble.letter;
-                    
-                    div.addEventListener('click', async () => {
-                        await hitBubble(bubble.letter);
-                    });
 
+                    div.addEventListener('click', () => hitBubble(bubble.letter));
                     game.appendChild(div);
                 });
             }
@@ -170,6 +168,15 @@ def index():
                 document.getElementById('level').textContent = `Level: ${data.level}`;
                 document.getElementById('high-score').textContent = `High Score: ${data.high_score.name} - ${data.high_score.score}`;
             }
+
+            // ✅ Fixed keypress tracking
+            window.addEventListener('keydown', async (event) => {
+                const keyPressed = event.key.toUpperCase();
+                const response = await fetch(`/hit_bubble?letter=${keyPressed}`);
+                const data = await response.json();
+                updateBubbles(data.bubbles);
+                document.getElementById('score').textContent = `Score: ${data.score}`;
+            });
 
             async function hitBubble(letter) {
                 const response = await fetch(`/hit_bubble?letter=${letter}`);
