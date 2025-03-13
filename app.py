@@ -118,6 +118,16 @@ def index():
         <script>
             let score = 0;
             let paused = false;
+            let playerName = localStorage.getItem('playerName') || "";
+
+            if (!playerName) {
+                playerName = prompt("Enter player name:");
+                if (playerName) {
+                    localStorage.setItem('playerName', playerName);
+                }
+            }
+
+            document.getElementById('player').textContent = `Player: ${playerName}`;
 
             function updateBubbles(bubbles) {
                 const game = document.getElementById('game');
@@ -161,7 +171,6 @@ def index():
                 document.getElementById('level').textContent = `Level: ${data.level}`;
                 document.getElementById('high-score').textContent = `High Score: ${data.highest_score}`;
 
-                // ✅ Play sound
                 if (data.correct) {
                     document.getElementById('correct-sound').play();
                 } else {
@@ -182,11 +191,11 @@ def index():
 @app.route('/get_bubbles')
 def get_bubbles():
     global bubbles, score, level, speed, spawn_rate, highest_score
-    
+
     bubbles = [bubble for bubble in bubbles if bubble['y'] > -60]
     for bubble in bubbles:
         bubble['y'] -= speed
-    
+
     if score >= level * 10 and level < 20:
         level += 1
         speed += 0.7
@@ -199,7 +208,7 @@ def hit_bubble():
     global bubbles, score, highest_score
     letter = request.args.get('letter')
     correct = False
-    
+
     for bubble in bubbles[:]:
         if bubble['letter'] == letter:
             bubbles.remove(bubble)
@@ -208,7 +217,7 @@ def hit_bubble():
 
     if score > highest_score:
         highest_score = score
-    
+
     return jsonify({'bubbles': bubbles, 'score': score, 'level': level, 'highest_score': highest_score, 'correct': correct})
 
 if __name__ == '__main__':
